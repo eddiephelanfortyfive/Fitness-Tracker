@@ -2,3 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Ensure solid background covers entire scrollable area */
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #0f172a; /* slate-900 - matches app background */
+  min-height: 100%;
+  height: 100%;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+  background-color: #0f172a; /* slate-900 */
+}
+
