@@ -2,13 +2,13 @@
   "name": "Hybrid Training Tracker",
   "short_name": "Hybrid Tracker",
   "description": "Track your hybrid training progress - running, cycling, and weight training",
-  "start_url": "/",
+  "start_url": "/Fitness-Tracker/",
   "display": "standalone",
   "background_color": "#1e293b",
   "theme_color": "#1e293b",
   "icons": [
     {
-      "src": "/icon-hybrid.png",
+      "src": "/Fitness-Tracker/icon-hybrid.png",
       "sizes": "180x180",
       "type": "image/png",
       "purpose": "any maskable"
