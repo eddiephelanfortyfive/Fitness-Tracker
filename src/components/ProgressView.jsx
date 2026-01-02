@@ -8,6 +8,7 @@ const ProgressView = ({
   runningData,
   cyclingData,
   weightData,
+  yogaData,
   weightLogData,
   targetWeight,
   workoutDays,
@@ -19,12 +20,16 @@ const ProgressView = ({
   cyclingPaceData,
   bodyWeightTrendData,
   bodyWeightWeeklyData,
-  getWeightChartData
+  getWeightChartData,
+  coldExposureData,
+  coldExposureDurationData,
+  coldExposureMethodData,
+  yogaDurationData
 }) => {
-  const overallProgress = calculateOverallProgress(runningData, cyclingData, weightData);
+  const overallProgress = calculateOverallProgress(runningData, cyclingData, weightData, yogaData);
   const weeklyProgressData = [...Array(maxWeeks)].map((_, i) => {
     const week = i + 1;
-    const weekProgress = calculateWeekProgress(week, runningData, cyclingData, weightData);
+    const weekProgress = calculateWeekProgress(week, runningData, cyclingData, weightData, yogaData);
     return weekProgress.completionRate;
   });
 
@@ -116,8 +121,9 @@ const ProgressView = ({
                 const workout = weekWeights.find(w => w.day === day && w.workoutName === workoutName);
                 return workout?.status === 'completed';
               });
+              const weekYoga = yogaData?.filter(y => y && y.week === week && y.status === 'completed') || [];
               
-              const hasCompleted = weekRunning.length > 0 || cyclingStatus === 'completed' || completedWeights.length > 0;
+              const hasCompleted = weekRunning.length > 0 || cyclingStatus === 'completed' || completedWeights.length > 0 || weekYoga.length > 0;
               
               if (!hasCompleted) return null;
               
@@ -152,6 +158,14 @@ const ProgressView = ({
                         </div>
                       );
                     })}
+                    {weekYoga.map((yoga, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-sm">
+                        <Check size={16} className="text-green-400 flex-shrink-0" />
+                        <span className="text-slate-300">
+                          <span className="font-semibold text-indigo-400">Yoga:</span> {yoga.day} {yoga.duration ? `(${yoga.duration})` : ''}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               );
@@ -169,7 +183,8 @@ const ProgressView = ({
                 const workout = weekWeights.find(w => w.day === day && w.workoutName === workoutName);
                 return workout?.status === 'completed';
               });
-              return weekRunning.length === 0 && cyclingStatus !== 'completed' && completedWeights.length === 0;
+              const weekYoga = yogaData?.filter(y => y && y.week === week && y.status === 'completed') || [];
+              return weekRunning.length === 0 && cyclingStatus !== 'completed' && completedWeights.length === 0 && weekYoga.length === 0;
             }) && (
               <div className="text-center text-slate-500 py-8">
                 <p className="text-lg">No completed workouts yet</p>
@@ -227,7 +242,7 @@ const ProgressView = ({
                       ...chartOptions.scales.y,
                       title: {
                         display: true,
-                        text: 'Pace (km/h)',
+                        text: 'Pace (min/km)',
                         color: '#94a3b8'
                       }
                     }
@@ -288,7 +303,7 @@ const ProgressView = ({
                       ...chartOptions.scales.y,
                       title: {
                         display: true,
-                        text: 'Pace (km/h)',
+                        text: 'Pace (min/km)',
                         color: '#94a3b8'
                       }
                     }
@@ -430,6 +445,106 @@ const ProgressView = ({
           </div>
         )}
       </div>
+
+      {/* Yoga Progress */}
+      {yogaData && yogaData.length > 0 && (
+        <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700">
+          <h2 className="text-2xl font-bold text-white mb-6">Yoga Progress</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Duration Trend Bar Chart */}
+            <div className="bg-slate-700 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-white mb-4">Total Duration Per Week</h3>
+              <div style={{ height: '300px', width: '100%' }}>
+                <Bar
+                  data={yogaDurationData}
+                  options={{
+                    ...chartOptions,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                      ...chartOptions.scales,
+                      y: {
+                        ...chartOptions.scales.y,
+                        title: {
+                          display: true,
+                          text: 'Duration (minutes)',
+                          color: '#94a3b8'
+                        },
+                        beginAtZero: true
+                      }
+                    }
+                  }}
+                  redraw={false}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cold Exposure Progress */}
+      {coldExposureData && coldExposureData.length > 0 && (
+        <div className="bg-slate-800 rounded-lg shadow-xl p-6 border border-slate-700">
+          <h2 className="text-2xl font-bold text-white mb-6">Cold Exposure Progress</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Duration Trend Line Chart */}
+            <div className="bg-slate-700 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-white mb-4">Duration Over Time</h3>
+              <div style={{ height: '300px', width: '100%' }}>
+                <Line
+                  data={coldExposureDurationData}
+                  options={{
+                    ...chartOptions,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                      ...chartOptions.scales,
+                      y: {
+                        ...chartOptions.scales.y,
+                        title: {
+                          display: true,
+                          text: 'Duration (minutes)',
+                          color: '#94a3b8'
+                        },
+                        beginAtZero: true
+                      }
+                    }
+                  }}
+                  redraw={false}
+                />
+              </div>
+            </div>
+
+            {/* Method Distribution Bar Chart */}
+            <div className="bg-slate-700 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-white mb-4">Method Distribution</h3>
+              <div style={{ height: '300px', width: '100%' }}>
+                <Bar
+                  data={coldExposureMethodData}
+                  options={{
+                    ...chartOptions,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                      ...chartOptions.scales,
+                      y: {
+                        ...chartOptions.scales.y,
+                        title: {
+                          display: true,
+                          text: 'Number of Sessions',
+                          color: '#94a3b8'
+                        },
+                        beginAtZero: true
+                      }
+                    }
+                  }}
+                  redraw={false}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

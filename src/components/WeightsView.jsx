@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { getLastWeekWeight } from '../utils/calculations';
 
 const WeightsView = ({ 
@@ -8,7 +8,10 @@ const WeightsView = ({
   workoutDays, 
   updateWeight, 
   updateNumSets, 
-  updateWorkoutStatus 
+  updateWorkoutStatus,
+  isCollapsed,
+  toggleCollapsed,
+  getWorkoutIdentifier
 }) => {
   return (
     <div className="space-y-6">
@@ -16,38 +19,72 @@ const WeightsView = ({
         const dayExercises = weightData.filter(
           item => item.week === activeWeek && item.day === workout.day
         );
+        const workoutStatus = dayExercises[0]?.status || 'not_done';
+        const workoutId = getWorkoutIdentifier('weights', { week: activeWeek, day: workout.day, workoutName: workout.name });
+        const collapsed = isCollapsed(workoutId);
+        const shouldShowCollapsed = (workoutStatus === 'completed' || workoutStatus === 'skipped') && collapsed;
         
         return (
           <div key={dayIndex} className="bg-slate-800 rounded-lg shadow-xl overflow-hidden border border-slate-700">
             <div className="bg-slate-900 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-700">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg sm:text-xl font-semibold text-white">{workout.day} - {workout.name}</h3>
-                {(() => {
-                  const workoutStatus = dayExercises[0]?.status || 'not_done';
-                  return (
+                <div className="flex items-center gap-2">
+                  {(workoutStatus === 'completed' || workoutStatus === 'skipped') && (
                     <button
-                      onClick={() => updateWorkoutStatus('weights', { week: activeWeek, day: workout.day, workoutName: workout.name }, workoutStatus)}
-                      className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 ${
-                        workoutStatus === 'completed' 
-                          ? 'bg-green-600 text-white hover:bg-green-700' 
-                          : workoutStatus === 'skipped'
-                          ? 'bg-red-600 text-white hover:bg-red-700'
-                          : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
-                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCollapsed(workoutId);
+                      }}
+                      className="px-2 py-1.5 rounded-lg text-slate-300 hover:bg-slate-700 transition-all"
+                      title={collapsed ? 'Expand' : 'Collapse'}
                     >
-                      {workoutStatus === 'completed' ? (
-                        <> <Check size={16} /> <span className="hidden sm:inline">Completed</span> </>
-                      ) : workoutStatus === 'skipped' ? (
-                        <> <X size={16} /> <span className="hidden sm:inline">Skipped</span> </>
-                      ) : (
-                        <> ○ <span className="hidden sm:inline">Not Done</span> </>
-                      )}
+                      {collapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
                     </button>
-                  );
-                })()}
+                  )}
+                  <button
+                    onClick={() => updateWorkoutStatus('weights', { week: activeWeek, day: workout.day, workoutName: workout.name }, workoutStatus)}
+                    className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 ${
+                      workoutStatus === 'completed' 
+                        ? 'bg-green-600 text-white hover:bg-green-700' 
+                        : workoutStatus === 'skipped'
+                        ? 'bg-red-600 text-white hover:bg-red-700'
+                        : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                    }`}
+                  >
+                    {workoutStatus === 'completed' ? (
+                      <> <Check size={16} /> <span className="hidden sm:inline">Completed</span> </>
+                    ) : workoutStatus === 'skipped' ? (
+                      <> <X size={16} /> <span className="hidden sm:inline">Skipped</span> </>
+                    ) : (
+                      <> ○ <span className="hidden sm:inline">Not Done</span> </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
-            <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
+              {shouldShowCollapsed ? (
+              <div className="p-4 bg-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      workoutStatus === 'completed' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+                    }`}>
+                      {workoutStatus === 'completed' ? 'Completed' : 'Skipped'}
+                    </span>
+                    <span className="text-sm text-slate-400">Click to expand and view details</span>
+                  </div>
+                  <button
+                    onClick={() => toggleCollapsed(workoutId)}
+                    className="px-3 py-1.5 rounded-lg text-slate-300 hover:bg-slate-700 transition-all flex items-center gap-1"
+                  >
+                    <span className="text-xs">Expand</span>
+                    <ChevronDown size={16} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
               {dayExercises.map((exercise, exerciseIndex) => {
                 const exerciseDataIndex = weightData.findIndex(
                   item => item.week === exercise.week && 
@@ -222,7 +259,8 @@ const WeightsView = ({
                   </div>
                 );
               })}
-            </div>
+              </div>
+            )}
           </div>
         );
       })}
