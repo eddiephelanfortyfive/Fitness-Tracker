@@ -1,19 +1,32 @@
 // CSV export functionality
+import { decimalToMMSS } from './timeFormat';
 
 export const exportToCSV = (activeSheet, activeWeek, runningData, cyclingData, weightData, getLastWeekWeight) => {
   let csv = '';
   
   if (activeSheet === 'running') {
-    csv = 'Week,Day,Run,Type,Intensity,Distance (km),Duration (min),Pace (km/h),RPE (1-5)\n';
+    csv = 'Week,Day,Run,Type,Intensity,Distance (km),Duration (MM:SS),Pace (min/km),RPE (1-5)\n';
     if (Array.isArray(runningData)) {
       runningData.filter(r => r && r.week === activeWeek).forEach(row => {
-        csv += `${row.week || ''},${row.day || ''},${row.run || ''},${row.type || ''},${row.intensity || ''},${row.distance || ''},${row.duration || ''},${row.pace || ''},${row.rpe || ''}\n`;
+        // Convert duration to MM:SS format for export
+        const durationDisplay = row.duration 
+          ? (typeof row.duration === 'string' && row.duration.includes(':') 
+              ? row.duration 
+              : decimalToMMSS(row.duration))
+          : '';
+        csv += `${row.week || ''},${row.day || ''},${row.run || ''},${row.type || ''},${row.intensity || ''},${row.distance || ''},${durationDisplay},${row.pace || ''},${row.rpe || ''}\n`;
       });
     }
   } else if (activeSheet === 'cycling') {
-    csv = 'Week,Day,Segment,Duration (min),Distance (km),Pace (km/h),RPE (1-5)\n';
+    csv = 'Week,Day,Segment,Duration (MM:SS),Distance (km),Pace (min/km),RPE (1-5)\n';
     cyclingData.filter(r => r.week === activeWeek).forEach(row => {
-      csv += `${row.week},${row.day},${row.segment},${row.duration},${row.distance},${row.pace},${row.rpe}\n`;
+      // Convert duration to MM:SS format for export
+      const durationDisplay = row.duration 
+        ? (typeof row.duration === 'string' && row.duration.includes(':') 
+            ? row.duration 
+            : decimalToMMSS(row.duration))
+        : '';
+      csv += `${row.week},${row.day},${row.segment},${durationDisplay},${row.distance},${row.pace},${row.rpe}\n`;
     });
   } else if (activeSheet === 'weights') {
     csv = 'Week,Day,Workout,Exercise,Rep Range,Set,Last Week Weight,Weight (kg),Reps,RPE (1-10),Notes\n';

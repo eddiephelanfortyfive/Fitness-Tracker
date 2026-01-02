@@ -225,3 +225,104 @@ export const getLastWeekWeight = (currentWeek, day, exercise, setNum, weightData
   return lastSet?.weight || '-';
 };
 
+// Calculate current week from start date
+export const calculateCurrentWeek = (startDate, maxWeeks) => {
+  if (!startDate) return null;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  
+  // If start date is in the future, return null (program hasn't started yet)
+  if (today < start) return null;
+  
+  const daysDiff = Math.floor((today - start) / (1000 * 60 * 60 * 24));
+  const week = Math.floor(daysDiff / 7) + 1;
+  
+  // Clamp to valid weeks (1 to maxWeeks)
+  return Math.max(1, Math.min(week, maxWeeks));
+};
+
+// Get days into program
+export const getDaysIntoProgram = (startDate) => {
+  if (!startDate) return null;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  
+  // If start date is in the future, return null (program hasn't started yet)
+  if (today < start) return null;
+  
+  const daysDiff = Math.floor((today - start) / (1000 * 60 * 60 * 24));
+  return Math.max(0, daysDiff);
+};
+
+// Get today's weekday name
+export const getTodayWeekday = () => {
+  return new Date().toLocaleDateString('en-US', { weekday: 'long' });
+};
+
+// Calculate the date for a workout given start date, week, and day
+export const calculateWorkoutDate = (startDate, week, dayName) => {
+  if (!startDate) return null;
+  
+  const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  
+  // Calculate the date: start date + (week - 1) * 7 days + day offset
+  const weekOffset = (week - 1) * 7;
+  const dayIndex = weekdays.indexOf(dayName);
+  const startDayIndex = start.getDay(); // 0 = Sunday, 6 = Saturday
+  
+  // Calculate days to add: week offset + difference between target day and start day
+  const daysToAdd = weekOffset + ((dayIndex - startDayIndex + 7) % 7);
+  
+  const workoutDate = new Date(start);
+  workoutDate.setDate(start.getDate() + daysToAdd);
+  
+  return workoutDate;
+};
+
+// Get the next upcoming workout
+export const getNextWorkout = (effectiveWeek, maxWeeks, runningData, cyclingData, weightData, workoutDays, activeLevel, todayWeekday, programHasStarted = true) => {
+  const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const todayIndex = weekdays.indexOf(todayWeekday);
+  
+  // Check current week starting from today
+  let currentWeek = effectiveWeek;
+  // If program hasn't started, start from beginning of Week 1; otherwise start from tomorrow
+  let startIndex = programHasStarted ? (todayIndex + 1) : 0;
+  
+  // First, check remaining days in current week
+  for (let week = currentWeek; week <= maxWeeks; week++) {
+    const schedule = getScheduleForWeek(week, runningData, cyclingData, weightData, workoutDays, activeLevel);
+    
+    // If checking current week and program has started, start from tomorrow; otherwise start from Sunday
+    const startDayIndex = (week === currentWeek && programHasStarted) ? startIndex : 0;
+    
+    for (let i = startDayIndex; i < weekdays.length; i++) {
+      const day = weekdays[i];
+      const workouts = schedule[day] || [];
+      
+      if (workouts.length > 0) {
+        // Return the first workout found
+        return {
+          workout: workouts[0],
+          day: day,
+          week: week
+        };
+      }
+    }
+    
+    // Reset start index for future weeks
+    startIndex = 0;
+  }
+  
+  // No future workouts found
+  return null;
+};
+

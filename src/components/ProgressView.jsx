@@ -227,7 +227,7 @@ const ProgressView = ({
                       ...chartOptions.scales.y,
                       title: {
                         display: true,
-                        text: 'Pace (km/h)',
+                        text: 'Pace (min/km)',
                         color: '#94a3b8'
                       }
                     }
@@ -288,7 +288,7 @@ const ProgressView = ({
                       ...chartOptions.scales.y,
                       title: {
                         display: true,
-                        text: 'Pace (km/h)',
+                        text: 'Pace (min/km)',
                         color: '#94a3b8'
                       }
                     }

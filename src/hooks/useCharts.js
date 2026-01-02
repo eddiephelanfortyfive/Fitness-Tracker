@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
+import { mmssToDecimal } from '../utils/timeFormat';
 
 // Hook for running charts data
 export const useRunningCharts = (runningData, activeLevel, maxWeeks) => {
   const runningDistanceData = useMemo(() => {
     const runTypes = activeLevel === 1 
-      ? [{ day: 'Sunday', label: 'Run 1' }, { day: 'Tuesday', label: 'Run 2' }, { day: 'Thursday', label: 'Run 3' }]
+      ? [{ day: 'Monday', label: 'Run 1' }, { day: 'Wednesday', label: 'Run 2' }, { day: 'Saturday', label: 'Run 3' }]
       : [{ day: 'Monday', label: 'Run 1' }, { day: 'Wednesday', label: 'Run 2' }, { day: 'Saturday', label: 'Run 3' }];
     
     const datasets = runTypes.map((runType, idx) => {
@@ -31,14 +32,22 @@ export const useRunningCharts = (runningData, activeLevel, maxWeeks) => {
 
   const runningPaceData = useMemo(() => {
     const runTypes = activeLevel === 1 
-      ? [{ day: 'Sunday', label: 'Run 1' }, { day: 'Tuesday', label: 'Run 2' }, { day: 'Thursday', label: 'Run 3' }]
+      ? [{ day: 'Monday', label: 'Run 1' }, { day: 'Wednesday', label: 'Run 2' }, { day: 'Saturday', label: 'Run 3' }]
       : [{ day: 'Monday', label: 'Run 1' }, { day: 'Wednesday', label: 'Run 2' }, { day: 'Saturday', label: 'Run 3' }];
     
     const datasets = runTypes.map((runType, idx) => {
       const data = [];
       for (let week = 1; week <= maxWeeks; week++) {
         const run = runningData.find(r => r.week === week && r.day === runType.day && r.type === 'Steady');
-        data.push(run && run.pace ? parseFloat(run.pace) : null);
+        if (run && run.pace) {
+          // Convert MM:SS pace to decimal minutes for charting
+          const paceDecimal = typeof run.pace === 'string' && run.pace.includes(':')
+            ? mmssToDecimal(run.pace)
+            : parseFloat(run.pace);
+          data.push(!isNaN(paceDecimal) ? paceDecimal : null);
+        } else {
+          data.push(null);
+        }
       }
       return {
         label: runType.label,
@@ -82,12 +91,20 @@ export const useCyclingCharts = (cyclingData, maxWeeks) => {
   const cyclingPaceData = useMemo(() => ({
     labels: [...Array(maxWeeks)].map((_, i) => `Week ${i + 1}`),
     datasets: [{
-      label: 'Average Pace (km/h)',
+      label: 'Average Pace (min/km)',
       data: [...Array(maxWeeks)].map((_, i) => {
         const week = i + 1;
         const weekData = cyclingData.filter(c => c.week === week && c.pace);
         if (weekData.length === 0) return null;
-        const avgPace = weekData.reduce((sum, segment) => sum + parseFloat(segment.pace), 0) / weekData.length;
+        // Convert MM:SS pace to decimal minutes for charting
+        const paceValues = weekData.map(segment => {
+          if (typeof segment.pace === 'string' && segment.pace.includes(':')) {
+            return mmssToDecimal(segment.pace);
+          }
+          return parseFloat(segment.pace);
+        }).filter(v => !isNaN(v));
+        if (paceValues.length === 0) return null;
+        const avgPace = paceValues.reduce((sum, pace) => sum + pace, 0) / paceValues.length;
         return avgPace;
       }),
       borderColor: 'rgb(34, 197, 94)',
