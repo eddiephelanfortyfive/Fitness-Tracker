@@ -3,43 +3,81 @@
 // Helper function to get default running data for Level 1
 export const getDefaultRunningDataLevel1 = () => {
   const weeks = [];
-  const runDays = ['Sunday', 'Tuesday', 'Thursday']; // Days for the 3 runs
+  // Level 1: Monday 3KM, Wednesday 3KM, Saturday 5KM (per PDF)
+  // Weeks 2-5: Increase Monday and Wednesday runs by 0.5KM per week until they hit 5KM
+  // Week 6-8: Wednesday becomes interval run
   
   for (let week = 1; week <= 8; week++) {
-    for (let run = 0; run < 3; run++) {
-      let distance = week === 1 ? 3 : week <= 5 ? 3 + (week - 1) * 0.5 : 5;
-      let type = 'Steady';
-      let intensity = run === 1 ? '80-85% HR' : '65-75% HR';
-      
-      let intervalStructure = '';
-      let intervalRounds = 0;
-      let restTime = '';
-      
-      if (week >= 6 && run === 1) {
-        type = 'Interval';
-        intensity = 'Variable';
-        // Level 1: 5KM split into exactly as per PDF
-        intervalStructure = '1KM Easy @ 60% HR → 500m Hard @ 85% HR → 1KM Easy @ 60% HR → 1KM Hard @ 85% HR → 1KM Easy @ 60% HR → 500m Hard @ 85% HR';
-        intervalRounds = 1; // Single sequence (total 5KM)
-        restTime = 'Active recovery (easy pace segments @ 60% HR)';
-      }
-      
-      weeks.push({
-        week,
-        day: runDays[run],
-        run: run + 1,
-        type,
-        intensity,
-        distance,
-        duration: '',
-        pace: '',
-        rpe: '',
-        intervalStructure,
-        intervalRounds,
-        restTime,
-        status: 'not_done'
-      });
+    // Calculate distances
+    let mondayDistance = week === 1 ? 3 : week <= 5 ? 3 + (week - 1) * 0.5 : 5;
+    let wednesdayDistance = week === 1 ? 3 : week <= 5 ? 3 + (week - 1) * 0.5 : 5;
+    let saturdayDistance = 5; // Always 5KM
+    
+    // Run 1: Monday (3KM progressing to 5KM)
+    weeks.push({
+      week,
+      day: 'Monday',
+      run: 1,
+      type: 'Steady',
+      intensity: '65-75% HR',
+      distance: mondayDistance,
+      duration: '',
+      pace: '',
+      rpe: '',
+      intervalStructure: '',
+      intervalRounds: 0,
+      restTime: '',
+      status: 'not_done'
+    });
+    
+    // Run 2: Wednesday (3KM progressing to 5KM, becomes interval in weeks 6-8)
+    let wednesdayType = 'Steady';
+    let wednesdayIntensity = '80-85% HR';
+    let intervalStructure = '';
+    let intervalRounds = 0;
+    let restTime = '';
+    
+    if (week >= 6) {
+      wednesdayType = 'Interval';
+      wednesdayIntensity = 'Variable';
+      // Level 1: 5KM split into exactly as per PDF
+      intervalStructure = '1KM Easy @ 60% HR → 500m Hard @ 85% HR → 1KM Easy @ 60% HR → 1KM Hard @ 85% HR → 1KM Easy @ 60% HR → 500m Hard @ 85% HR';
+      intervalRounds = 1; // Single sequence (total 5KM)
+      restTime = 'Active recovery (easy pace segments @ 60% HR)';
     }
+    
+    weeks.push({
+      week,
+      day: 'Wednesday',
+      run: 2,
+      type: wednesdayType,
+      intensity: wednesdayIntensity,
+      distance: wednesdayDistance,
+      duration: '',
+      pace: '',
+      rpe: '',
+      intervalStructure,
+      intervalRounds,
+      restTime,
+      status: 'not_done'
+    });
+    
+    // Run 3: Saturday (always 5KM)
+    weeks.push({
+      week,
+      day: 'Saturday',
+      run: 3,
+      type: 'Steady',
+      intensity: '65-75% HR',
+      distance: saturdayDistance,
+      duration: '',
+      pace: '',
+      rpe: '',
+      intervalStructure: '',
+      intervalRounds: 0,
+      restTime: '',
+      status: 'not_done'
+    });
   }
   return weeks;
 };
@@ -209,7 +247,8 @@ export const getDefaultWeightDataLevel1 = (workoutDaysLevel1) => {
           recommendedSets: exercise.recommendedSets,
           numSets: 0, // User will select this
           sets: [], // Array of sets that will grow dynamically
-          status: 'not_done'
+          status: 'not_done',
+          weightRecommendation: null // 'drop', 'stay', 'increase', or null
         });
       });
     });
@@ -232,7 +271,8 @@ export const getDefaultWeightDataLevel2 = (workoutDaysLevel2) => {
           recommendedSets: exercise.recommendedSets,
           numSets: 0, // User will select this
           sets: [], // Array of sets that will grow dynamically
-          status: 'not_done'
+          status: 'not_done',
+          weightRecommendation: null // 'drop', 'stay', 'increase', or null
         });
       });
     });

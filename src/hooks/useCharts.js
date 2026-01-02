@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
+import { mmssToDecimal } from '../utils/timeFormat';
 
 // Hook for running charts data
 export const useRunningCharts = (runningData, activeLevel, maxWeeks) => {
   const runningDistanceData = useMemo(() => {
     const runTypes = activeLevel === 1 
-      ? [{ day: 'Sunday', label: 'Run 1' }, { day: 'Tuesday', label: 'Run 2' }, { day: 'Thursday', label: 'Run 3' }]
+      ? [{ day: 'Monday', label: 'Run 1' }, { day: 'Wednesday', label: 'Run 2' }, { day: 'Saturday', label: 'Run 3' }]
       : [{ day: 'Monday', label: 'Run 1' }, { day: 'Wednesday', label: 'Run 2' }, { day: 'Saturday', label: 'Run 3' }];
     
     const datasets = runTypes.map((runType, idx) => {
@@ -31,14 +32,22 @@ export const useRunningCharts = (runningData, activeLevel, maxWeeks) => {
 
   const runningPaceData = useMemo(() => {
     const runTypes = activeLevel === 1 
-      ? [{ day: 'Sunday', label: 'Run 1' }, { day: 'Tuesday', label: 'Run 2' }, { day: 'Thursday', label: 'Run 3' }]
+      ? [{ day: 'Monday', label: 'Run 1' }, { day: 'Wednesday', label: 'Run 2' }, { day: 'Saturday', label: 'Run 3' }]
       : [{ day: 'Monday', label: 'Run 1' }, { day: 'Wednesday', label: 'Run 2' }, { day: 'Saturday', label: 'Run 3' }];
     
     const datasets = runTypes.map((runType, idx) => {
       const data = [];
       for (let week = 1; week <= maxWeeks; week++) {
         const run = runningData.find(r => r.week === week && r.day === runType.day && r.type === 'Steady');
-        data.push(run && run.pace ? parseFloat(run.pace) : null);
+        if (run && run.pace) {
+          // Convert MM:SS pace to decimal minutes for charting
+          const paceDecimal = typeof run.pace === 'string' && run.pace.includes(':')
+            ? mmssToDecimal(run.pace)
+            : parseFloat(run.pace);
+          data.push(!isNaN(paceDecimal) ? paceDecimal : null);
+        } else {
+          data.push(null);
+        }
       }
       return {
         label: runType.label,
@@ -82,12 +91,20 @@ export const useCyclingCharts = (cyclingData, maxWeeks) => {
   const cyclingPaceData = useMemo(() => ({
     labels: [...Array(maxWeeks)].map((_, i) => `Week ${i + 1}`),
     datasets: [{
-      label: 'Average Pace (km/h)',
+      label: 'Average Pace (min/km)',
       data: [...Array(maxWeeks)].map((_, i) => {
         const week = i + 1;
         const weekData = cyclingData.filter(c => c.week === week && c.pace);
         if (weekData.length === 0) return null;
-        const avgPace = weekData.reduce((sum, segment) => sum + parseFloat(segment.pace), 0) / weekData.length;
+        // Convert MM:SS pace to decimal minutes for charting
+        const paceValues = weekData.map(segment => {
+          if (typeof segment.pace === 'string' && segment.pace.includes(':')) {
+            return mmssToDecimal(segment.pace);
+          }
+          return parseFloat(segment.pace);
+        }).filter(v => !isNaN(v));
+        if (paceValues.length === 0) return null;
+        const avgPace = paceValues.reduce((sum, pace) => sum + pace, 0) / paceValues.length;
         return avgPace;
       }),
       borderColor: 'rgb(34, 197, 94)',
@@ -236,3 +253,141 @@ export const useWeightTrainingCharts = (weightData, workoutDays, maxWeeks) => {
   return { getWeightChartData };
 };
 
+// Hook for cold exposure charts data
+export const useColdExposureCharts = (coldExposureData) => {
+  const coldExposureDurationData = useMemo(() => {
+    if (coldExposureData.length === 0) {
+      return { labels: [], datasets: [] };
+    }
+    
+    // Sort by date (oldest first for chart)
+    const sortedData = [...coldExposureData].sort((a, b) => {
+      return new Date(a.date) - new Date(b.date);
+    });
+    
+    // Group by date and calculate total duration per day
+    const dailyData = {};
+    sortedData.forEach(entry => {
+      if (entry.duration) {
+        const dateKey = entry.date;
+        if (!dailyData[dateKey]) {
+          dailyData[dateKey] = 0;
+        }
+        // Convert MM:SS to decimal minutes
+        const durationDecimal = typeof entry.duration === 'string' && entry.duration.includes(':')
+          ? mmssToDecimal(entry.duration)
+          : parseFloat(entry.duration);
+        if (!isNaN(durationDecimal)) {
+          dailyData[dateKey] += durationDecimal;
+        }
+      }
+    });
+    
+    const labels = Object.keys(dailyData).sort().map(date => 
+      new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    );
+    const durations = Object.keys(dailyData).sort().map(date => dailyData[date]);
+    
+    return {
+      labels,
+      datasets: [{
+        label: 'Duration (minutes)',
+        data: durations,
+        borderColor: 'rgb(6, 182, 212)',
+        backgroundColor: 'rgba(6, 182, 212, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 4,
+        pointBackgroundColor: 'rgb(6, 182, 212)',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2
+      }]
+    };
+  }, [coldExposureData]);
+
+  const coldExposureMethodData = useMemo(() => {
+    if (coldExposureData.length === 0) {
+      return { labels: [], datasets: [] };
+    }
+    
+    // Count entries by method
+    const methodCounts = {
+      shower: 0,
+      ice_bath: 0,
+      sea_river_swim: 0
+    };
+    
+    coldExposureData.forEach(entry => {
+      if (entry.method && methodCounts.hasOwnProperty(entry.method)) {
+        methodCounts[entry.method]++;
+      }
+    });
+    
+    const methodLabels = {
+      shower: 'Shower',
+      ice_bath: 'Ice Bath',
+      sea_river_swim: 'Sea/River Swim'
+    };
+    
+    return {
+      labels: Object.keys(methodCounts).map(method => methodLabels[method]),
+      datasets: [{
+        label: 'Number of Sessions',
+        data: Object.values(methodCounts),
+        backgroundColor: [
+          'rgba(6, 182, 212, 0.8)',
+          'rgba(59, 130, 246, 0.8)',
+          'rgba(34, 197, 94, 0.8)'
+        ],
+        borderColor: [
+          'rgb(6, 182, 212)',
+          'rgb(59, 130, 246)',
+          'rgb(34, 197, 94)'
+        ],
+        borderWidth: 2
+      }]
+    };
+  }, [coldExposureData]);
+
+  return { coldExposureDurationData, coldExposureMethodData };
+};
+
+// Hook for yoga charts data
+export const useYogaCharts = (yogaData, maxWeeks) => {
+  const yogaDurationData = useMemo(() => {
+    if (!yogaData || !Array.isArray(yogaData) || yogaData.length === 0) {
+      return { labels: [], datasets: [] };
+    }
+    
+    // Calculate total duration per week
+    const weeklyData = [...Array(maxWeeks)].map((_, i) => {
+      const week = i + 1;
+      const weekYoga = yogaData.filter(y => y.week === week && y.duration);
+      if (weekYoga.length === 0) return null;
+      
+      // Convert MM:SS to decimal minutes and sum
+      const totalMinutes = weekYoga.reduce((sum, entry) => {
+        const durationDecimal = typeof entry.duration === 'string' && entry.duration.includes(':')
+          ? mmssToDecimal(entry.duration)
+          : parseFloat(entry.duration);
+        return sum + (isNaN(durationDecimal) ? 0 : durationDecimal);
+      }, 0);
+      
+      return totalMinutes > 0 ? totalMinutes : null;
+    });
+    
+    return {
+      labels: [...Array(maxWeeks)].map((_, i) => `Week ${i + 1}`),
+      datasets: [{
+        label: 'Total Duration (minutes)',
+        data: weeklyData,
+        backgroundColor: 'rgba(99, 102, 241, 0.6)',
+        borderColor: 'rgb(99, 102, 241)',
+        borderWidth: 2
+      }]
+    };
+  }, [yogaData, maxWeeks]);
+
+  return { yogaDurationData };
+};

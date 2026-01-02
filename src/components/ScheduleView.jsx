@@ -1,17 +1,30 @@
 import React from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { calculateOverallProgress, calculateWeekProgress, getScheduleForWeek } from '../utils/calculations';
+import { convertHRPercentageToBPM } from '../utils/heartRate';
 
 const ScheduleView = ({ 
   maxWeeks, 
   runningData, 
   cyclingData, 
   weightData, 
+  yogaData,
+  getOrCreateYogaEntry,
   workoutDays, 
   activeLevel, 
-  updateWorkoutStatus 
+  updateWorkoutStatus,
+  isCollapsed,
+  toggleCollapsed,
+  getWorkoutIdentifier,
+  effectiveWeek,
+  todayWeekday,
+  startDate,
+  maxHeartRate
 }) => {
-  const overallProgress = calculateOverallProgress(runningData, cyclingData, weightData);
+  const overallProgress = calculateOverallProgress(runningData, cyclingData, weightData, yogaData);
+  
+  // Check if program has started (start date is today or in the past)
+  const programHasStarted = startDate ? new Date() >= new Date(startDate) : false;
 
   return (
     <div className="space-y-6">
@@ -43,8 +56,8 @@ const ScheduleView = ({
       
       {[...Array(maxWeeks)].map((_, weekIndex) => {
         const week = weekIndex + 1;
-        const schedule = getScheduleForWeek(week, runningData, cyclingData, weightData, workoutDays, activeLevel);
-        const weekProgress = calculateWeekProgress(week, runningData, cyclingData, weightData);
+        const schedule = getScheduleForWeek(week, runningData, cyclingData, weightData, workoutDays, activeLevel, yogaData, getOrCreateYogaEntry);
+        const weekProgress = calculateWeekProgress(week, runningData, cyclingData, weightData, yogaData);
         
         return (
           <div key={week} className="bg-slate-800 rounded-lg shadow-xl overflow-hidden border border-slate-700">
@@ -57,9 +70,23 @@ const ScheduleView = ({
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-7 divide-x divide-slate-700">
-              {Object.entries(schedule).map(([day, activities]) => (
-                <div key={day} className="p-4">
-                  <h3 className="font-bold text-white mb-3 text-center">{day}</h3>
+              {Object.entries(schedule).map(([day, activities]) => {
+                // Check if this is today's day in the current week
+                const isToday = programHasStarted && week === effectiveWeek && day === todayWeekday;
+                
+                return (
+                <div 
+                  key={day} 
+                  className={`p-4 ${isToday ? 'bg-orange-900/20 border-2 border-orange-500 rounded-lg' : ''}`}
+                >
+                  <h3 className="font-bold text-white mb-3 text-center flex items-center justify-center gap-2">
+                    {day}
+                    {isToday && (
+                      <span className="text-xs bg-orange-600 text-white px-2 py-0.5 rounded">
+                        Today
+                      </span>
+                    )}
+                  </h3>
                   <div className="space-y-2">
                     {activities.length > 0 ? (
                       activities.map((activity, idx) => {
@@ -76,6 +103,8 @@ const ScheduleView = ({
                               return 'bg-blue-900 border-blue-700 text-blue-200';
                             } else if (activity.type === 'Weights') {
                               return 'bg-purple-900 border-purple-700 text-purple-200';
+                            } else if (activity.type === 'Yoga') {
+                              return 'bg-indigo-900 border-indigo-700 text-indigo-200';
                             } else {
                               return 'bg-green-900 border-green-700 text-green-200';
                             }
@@ -86,25 +115,68 @@ const ScheduleView = ({
                           if (activity.type === 'Running') return 'running';
                           if (activity.type === 'Cycling') return 'cycling';
                           if (activity.type === 'Weights') return 'weights';
+                          if (activity.type === 'Yoga') return 'yoga';
                           return 'running';
                         };
+                        
+                        const workoutId = getWorkoutIdentifier(getActivityType(), activity.identifier);
+                        const collapsed = isCollapsed(workoutId);
+                        const shouldShowCollapsed = (activity.status === 'completed' || activity.status === 'skipped') && collapsed;
                         
                         return (
                           <div
                             key={idx}
-                            onClick={() => updateWorkoutStatus(getActivityType(), activity.identifier, activity.status)}
-                            className={`p-2 rounded text-xs border-2 cursor-pointer transition-all hover:opacity-80 ${getStatusColors()}`}
+                            className={`rounded text-xs border-2 transition-all ${getStatusColors()} ${
+                              shouldShowCollapsed ? 'p-2' : 'p-2 cursor-pointer hover:opacity-80'
+                            }`}
                           >
                             <div className="flex items-center justify-between mb-1">
                               <div className="font-semibold">{activity.type}</div>
-                              {activity.status === 'completed' && (
-                                <Check size={14} className="flex-shrink-0" />
-                              )}
-                              {activity.status === 'skipped' && (
-                                <X size={14} className="flex-shrink-0" />
-                              )}
+                              <div className="flex items-center gap-1">
+                                {(activity.status === 'completed' || activity.status === 'skipped') && (
+                                  <>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleCollapsed(workoutId);
+                                      }}
+                                      className="p-0.5 hover:opacity-70 transition-opacity"
+                                      title={collapsed ? 'Expand' : 'Collapse'}
+                                    >
+                                      {collapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                                    </button>
+                                    {activity.status === 'completed' ? (
+                                      <Check size={14} className="flex-shrink-0" />
+                                    ) : (
+                                      <X size={14} className="flex-shrink-0" />
+                                    )}
+                                  </>
+                                )}
+                                {activity.status === 'not_done' && (
+                                  <button
+                                    onClick={() => updateWorkoutStatus(getActivityType(), activity.identifier, activity.status)}
+                                    className="opacity-50 hover:opacity-100"
+                                  >
+                                    ○
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-xs opacity-90">{activity.detail}</div>
+                            {shouldShowCollapsed ? (
+                              <div className="text-xs opacity-90 italic">Click to expand</div>
+                            ) : (
+                              <>
+                                <div className="text-xs opacity-90">{convertHRPercentageToBPM(activity.detail, maxHeartRate)}</div>
+                                {(activity.status === 'completed' || activity.status === 'skipped') && (
+                                  <button
+                                    onClick={() => updateWorkoutStatus(getActivityType(), activity.identifier, activity.status)}
+                                    className="mt-1 text-xs opacity-75 hover:opacity-100"
+                                  >
+                                    Change Status
+                                  </button>
+                                )}
+                              </>
+                            )}
                           </div>
                         );
                       })
@@ -113,7 +185,8 @@ const ScheduleView = ({
                     )}
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           </div>
         );

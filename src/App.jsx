@@ -14,18 +14,27 @@ import {
 import { workoutDaysLevel1, workoutDaysLevel2 } from './data/workoutPlans';
 import { useRunningData, useCyclingData, useWeightData } from './hooks/useTrainingData';
 import { useWeightLog } from './hooks/useWeightLog';
-import { useRunningCharts, useCyclingCharts, useBodyWeightCharts, useWeightTrainingCharts } from './hooks/useCharts';
+import { useColdExposure } from './hooks/useColdExposure';
+import { useYogaData } from './hooks/useYogaData';
+import { useRunningCharts, useCyclingCharts, useBodyWeightCharts, useWeightTrainingCharts, useColdExposureCharts, useYogaCharts } from './hooks/useCharts';
+import { useCollapsedWorkouts } from './hooks/useCollapsedWorkouts';
+import { useProgramStart } from './hooks/useProgramStart';
+import { useMaxHeartRate } from './hooks/useMaxHeartRate';
 import { exportToCSV } from './utils/export';
-import { getLastWeekWeight } from './utils/calculations';
+import { getLastWeekWeight, calculateCurrentWeek, getDaysIntoProgram, getTodayWeekday, getScheduleForWeek, getNextWorkout, calculateWorkoutDate } from './utils/calculations';
 import Header from './components/Header';
-import Navigation from './components/Navigation';
+import SidebarMenu from './components/SidebarMenu';
 import WeekSelector from './components/WeekSelector';
 import ScheduleView from './components/ScheduleView';
 import RunningView from './components/RunningView';
 import CyclingView from './components/CyclingView';
 import WeightsView from './components/WeightsView';
+import YogaView from './components/YogaView';
 import WeightLogView from './components/WeightLogView';
+import ColdExposureView from './components/ColdExposureView';
 import ProgressView from './components/ProgressView';
+import HomeView from './components/HomeView';
+import SettingsModal from './components/SettingsModal';
 
 ChartJS.register(
   CategoryScale,
@@ -48,8 +57,10 @@ const App = () => {
       return 1;
     }
   });
-  const [activeSheet, setActiveSheet] = useState('schedule');
+  const [activeSheet, setActiveSheet] = useState('home');
   const [activeWeek, setActiveWeek] = useState(1);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const maxWeeks = activeLevel === 1 ? 8 : 10;
   const workoutDays = activeLevel === 1 ? workoutDaysLevel1 : workoutDaysLevel2;
@@ -57,7 +68,7 @@ const App = () => {
   // Use custom hooks for data management
   const { runningData, setRunningData, updateRunning } = useRunningData(activeLevel);
   const { cyclingData, setCyclingData, updateCycling } = useCyclingData(activeLevel);
-  const { weightData, setWeightData, updateWeight, updateNumSets } = useWeightData(activeLevel);
+  const { weightData, setWeightData, updateWeight, updateNumSets, updateWeightRecommendation } = useWeightData(activeLevel);
   const { 
     weightLogData, 
     setWeightLogData, 
@@ -67,12 +78,61 @@ const App = () => {
     updateWeightEntry, 
     deleteWeightEntry 
   } = useWeightLog(activeLevel);
+  const {
+    coldExposureData,
+    addColdExposureEntry,
+    updateColdExposureEntry,
+    deleteColdExposureEntry
+  } = useColdExposure(activeLevel);
+  const {
+    yogaData,
+    setYogaData,
+    updateYoga,
+    getOrCreateYogaEntry
+  } = useYogaData(activeLevel);
 
   // Use custom hooks for charts
   const { runningDistanceData, runningPaceData } = useRunningCharts(runningData, activeLevel, maxWeeks);
   const { cyclingDistanceData, cyclingPaceData } = useCyclingCharts(cyclingData, maxWeeks);
   const { bodyWeightTrendData, bodyWeightWeeklyData } = useBodyWeightCharts(weightLogData, targetWeight, maxWeeks);
   const { getWeightChartData } = useWeightTrainingCharts(weightData, workoutDays, maxWeeks);
+  const { coldExposureDurationData, coldExposureMethodData } = useColdExposureCharts(coldExposureData);
+  const { yogaDurationData } = useYogaCharts(yogaData, maxWeeks);
+
+  // Use collapse hook
+  const { isCollapsed, toggleCollapsed, setCollapsedState } = useCollapsedWorkouts(activeLevel);
+
+  // Use program start date hook (with activeLevel for level-specific dates)
+  const { startDate, setProgramStartDate, clearStartDate } = useProgramStart(activeLevel);
+  
+  // Use max heart rate hook
+  const { maxHeartRate, setMaxHeartRate } = useMaxHeartRate();
+
+  // Calculate current week from start date
+  const calculatedWeek = calculateCurrentWeek(startDate, maxWeeks);
+  const daysIntoProgram = getDaysIntoProgram(startDate);
+  const todayWeekday = getTodayWeekday();
+  
+  // Check if program has started (start date is today or in the past)
+  const programHasStarted = startDate ? new Date() >= new Date(startDate) : false;
+  
+  // Use calculated week if start date is set and program has started, otherwise use activeWeek
+  const effectiveWeek = (startDate && programHasStarted && calculatedWeek) ? calculatedWeek : activeWeek;
+
+  // Get today's workouts (only if program has started)
+  const getTodaysWorkouts = () => {
+    if (startDate && !programHasStarted) {
+      return []; // Program hasn't started yet, no workouts today
+    }
+    const schedule = getScheduleForWeek(effectiveWeek, runningData, cyclingData, weightData, workoutDays, activeLevel, yogaData, getOrCreateYogaEntry);
+    return schedule[todayWeekday] || [];
+  };
+  const todaysWorkouts = getTodaysWorkouts();
+
+  // Get next workout (if no workouts today)
+  // If program hasn't started, start searching from Week 1; otherwise use effectiveWeek
+  const weekToSearchFrom = (startDate && !programHasStarted) ? 1 : effectiveWeek;
+  const nextWorkout = getNextWorkout(weekToSearchFrom, maxWeeks, runningData, cyclingData, weightData, workoutDays, activeLevel, todayWeekday, programHasStarted, yogaData, getOrCreateYogaEntry);
 
   // Save active level to localStorage
   useEffect(() => {
@@ -87,6 +147,20 @@ const App = () => {
   useEffect(() => {
     setActiveWeek(1);
   }, [activeLevel]);
+
+  // Helper function to create workout identifier
+  const getWorkoutIdentifier = (type, identifier) => {
+    if (type === 'running') {
+      return `running-${identifier.week}-${identifier.day}-${identifier.run}`;
+    } else if (type === 'cycling') {
+      return `cycling-${identifier.week}-${identifier.day}`;
+    } else if (type === 'weights') {
+      return `weights-${identifier.week}-${identifier.day}-${identifier.workoutName}`;
+    } else if (type === 'yoga') {
+      return `yoga-${identifier.week}-${identifier.day}`;
+    }
+    return '';
+  };
 
   // Status update function - cycles through: not_done → completed → skipped → not_done
   const updateWorkoutStatus = (type, identifier, currentStatus) => {
@@ -134,6 +208,33 @@ const App = () => {
         }
       });
       setWeightData(newData);
+    } else if (type === 'yoga') {
+      // For yoga, update the entry for that week/day
+      // Identifier format: { week, day }
+      const newData = [...yogaData];
+      const index = newData.findIndex(y => 
+        y.week === identifier.week && 
+        y.day === identifier.day
+      );
+      if (index !== -1) {
+        newData[index].status = nextStatus;
+        setYogaData(newData);
+      } else {
+        // Create new entry if it doesn't exist
+        const newEntry = {
+          week: identifier.week,
+          day: identifier.day,
+          duration: '',
+          status: nextStatus
+        };
+        setYogaData([...newData, newEntry]);
+      }
+    }
+
+    // Auto-collapse when status becomes "completed" or "skipped"
+    if (nextStatus === 'completed' || nextStatus === 'skipped') {
+      const workoutId = getWorkoutIdentifier(type, identifier);
+      setCollapsedState(workoutId, true);
     }
   };
 
@@ -148,33 +249,87 @@ const App = () => {
 
   // Export CSV handler
   const handleExportToCSV = () => {
-    exportToCSV(activeSheet, activeWeek, runningData, cyclingData, weightData, getLastWeekWeight);
+    exportToCSV(activeSheet, effectiveWeek, runningData, cyclingData, weightData, getLastWeekWeight, coldExposureData, yogaData);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-2 sm:p-4 relative">
       <div className="max-w-7xl mx-auto">
+        <SidebarMenu
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          activeSheet={activeSheet}
+          setActiveSheet={setActiveSheet}
+          setShowSettings={setShowSettings}
+        />
+
         <Header 
           activeLevel={activeLevel} 
           setActiveLevel={setActiveLevel} 
-          handleRefresh={handleRefresh} 
-          maxWeeks={maxWeeks} 
-        />
-
-        <Navigation 
-          activeSheet={activeSheet} 
-          setActiveSheet={setActiveSheet} 
-          activeWeek={activeWeek} 
           maxWeeks={maxWeeks}
-          handleExportToCSV={handleExportToCSV}
+          activeWeek={activeWeek}
+          setActiveWeek={setActiveWeek}
+          effectiveWeek={effectiveWeek}
+          startDate={startDate}
+          activeSheet={activeSheet}
+          onMenuClick={() => setIsSidebarOpen(true)}
+          handleRefresh={handleRefresh}
         />
 
-        <WeekSelector 
-          activeWeek={activeWeek} 
-          setActiveWeek={setActiveWeek} 
-          maxWeeks={maxWeeks} 
-          activeSheet={activeSheet}
+        <SettingsModal
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+          startDate={startDate}
+          setProgramStartDate={setProgramStartDate}
+          clearStartDate={clearStartDate}
+          activeLevel={activeLevel}
+          setActiveLevel={setActiveLevel}
+          handleRefresh={handleRefresh}
+          maxHeartRate={maxHeartRate}
+          setMaxHeartRate={setMaxHeartRate}
         />
+
+        {/* Week Selector - Only show when start date is not set and not on home */}
+        {!startDate && activeSheet !== 'home' && (
+          <WeekSelector 
+            activeWeek={activeWeek} 
+            setActiveWeek={setActiveWeek} 
+            maxWeeks={maxWeeks} 
+            activeSheet={activeSheet}
+          />
+        )}
+
+        {/* Home View */}
+        {activeSheet === 'home' && (
+          <HomeView
+            maxWeeks={maxWeeks}
+            runningData={runningData}
+            cyclingData={cyclingData}
+            weightData={weightData}
+            yogaData={yogaData}
+            coldExposureData={coldExposureData}
+            workoutDays={workoutDays}
+            activeLevel={activeLevel}
+            updateWorkoutStatus={updateWorkoutStatus}
+            updateRunning={updateRunning}
+            updateCycling={updateCycling}
+            updateYoga={updateYoga}
+            getOrCreateYogaEntry={getOrCreateYogaEntry}
+            todaysWorkouts={todaysWorkouts}
+            nextWorkout={nextWorkout}
+            effectiveWeek={effectiveWeek}
+            daysIntoProgram={daysIntoProgram}
+            startDate={startDate}
+            isCollapsed={isCollapsed}
+            toggleCollapsed={toggleCollapsed}
+            getWorkoutIdentifier={getWorkoutIdentifier}
+            setActiveSheet={setActiveSheet}
+            setActiveWeek={setActiveWeek}
+            setShowSettings={setShowSettings}
+            calculateWorkoutDate={calculateWorkoutDate}
+            maxHeartRate={maxHeartRate}
+          />
+        )}
 
         {/* Schedule View */}
         {activeSheet === 'schedule' && (
@@ -183,50 +338,87 @@ const App = () => {
             runningData={runningData}
             cyclingData={cyclingData}
             weightData={weightData}
+            yogaData={yogaData}
+            getOrCreateYogaEntry={getOrCreateYogaEntry}
             workoutDays={workoutDays}
             activeLevel={activeLevel}
             updateWorkoutStatus={updateWorkoutStatus}
+            isCollapsed={isCollapsed}
+            toggleCollapsed={toggleCollapsed}
+            getWorkoutIdentifier={getWorkoutIdentifier}
+            effectiveWeek={effectiveWeek}
+            todayWeekday={todayWeekday}
+            startDate={startDate}
+            maxHeartRate={maxHeartRate}
           />
         )}
 
         {/* Running View */}
         {activeSheet === 'running' && (
           <RunningView
-            activeWeek={activeWeek}
+            activeWeek={effectiveWeek}
             runningData={runningData}
             updateRunning={updateRunning}
             updateWorkoutStatus={updateWorkoutStatus}
             activeLevel={activeLevel}
+            isCollapsed={isCollapsed}
+            toggleCollapsed={toggleCollapsed}
+            getWorkoutIdentifier={getWorkoutIdentifier}
+            maxHeartRate={maxHeartRate}
           />
         )}
 
         {/* Cycling View */}
         {activeSheet === 'cycling' && (
           <CyclingView
-            activeWeek={activeWeek}
+            activeWeek={effectiveWeek}
             cyclingData={cyclingData}
             updateCycling={updateCycling}
             updateWorkoutStatus={updateWorkoutStatus}
             activeLevel={activeLevel}
+            isCollapsed={isCollapsed}
+            toggleCollapsed={toggleCollapsed}
+            getWorkoutIdentifier={getWorkoutIdentifier}
           />
         )}
 
         {/* Weights View */}
         {activeSheet === 'weights' && (
           <WeightsView
-            activeWeek={activeWeek}
+            activeWeek={effectiveWeek}
             weightData={weightData}
             workoutDays={workoutDays}
             updateWeight={updateWeight}
             updateNumSets={updateNumSets}
             updateWorkoutStatus={updateWorkoutStatus}
+            isCollapsed={isCollapsed}
+            toggleCollapsed={toggleCollapsed}
+            getWorkoutIdentifier={getWorkoutIdentifier}
+            updateWeightRecommendation={updateWeightRecommendation}
+          />
+        )}
+
+        {/* Yoga View */}
+        {activeSheet === 'yoga' && (
+          <YogaView
+            activeWeek={effectiveWeek}
+            yogaData={yogaData}
+            runningData={runningData}
+            cyclingData={cyclingData}
+            updateYoga={updateYoga}
+            updateWorkoutStatus={updateWorkoutStatus}
+            activeLevel={activeLevel}
+            isCollapsed={isCollapsed}
+            toggleCollapsed={toggleCollapsed}
+            getWorkoutIdentifier={getWorkoutIdentifier}
+            getOrCreateYogaEntry={getOrCreateYogaEntry}
           />
         )}
 
         {/* Weight Log View */}
         {activeSheet === 'weightlog' && (
           <WeightLogView
-            activeWeek={activeWeek}
+            activeWeek={effectiveWeek}
             setActiveWeek={setActiveWeek}
             maxWeeks={maxWeeks}
             weightLogData={weightLogData}
@@ -238,12 +430,25 @@ const App = () => {
           />
         )}
 
+        {/* Cold Exposure View */}
+        {activeSheet === 'coldexposure' && (
+          <ColdExposureView
+            coldExposureData={coldExposureData}
+            addColdExposureEntry={addColdExposureEntry}
+            updateColdExposureEntry={updateColdExposureEntry}
+            deleteColdExposureEntry={deleteColdExposureEntry}
+            coldExposureDurationData={coldExposureDurationData}
+            coldExposureMethodData={coldExposureMethodData}
+          />
+        )}
+
         {/* Progress View */}
         {activeSheet === 'progress' && (
           <ProgressView
             runningData={runningData}
             cyclingData={cyclingData}
             weightData={weightData}
+            yogaData={yogaData}
             weightLogData={weightLogData}
             targetWeight={targetWeight}
             workoutDays={workoutDays}
@@ -256,6 +461,10 @@ const App = () => {
             bodyWeightTrendData={bodyWeightTrendData}
             bodyWeightWeeklyData={bodyWeightWeeklyData}
             getWeightChartData={getWeightChartData}
+            coldExposureData={coldExposureData}
+            coldExposureDurationData={coldExposureDurationData}
+            coldExposureMethodData={coldExposureMethodData}
+            yogaDurationData={yogaDurationData}
           />
         )}
       </div>

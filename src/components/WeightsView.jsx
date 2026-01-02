@@ -1,6 +1,7 @@
 import React from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp, ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import { getLastWeekWeight } from '../utils/calculations';
+import WeightRecommendation from './WeightRecommendation';
 
 const WeightsView = ({ 
   activeWeek, 
@@ -8,7 +9,11 @@ const WeightsView = ({
   workoutDays, 
   updateWeight, 
   updateNumSets, 
-  updateWorkoutStatus 
+  updateWorkoutStatus,
+  isCollapsed,
+  toggleCollapsed,
+  getWorkoutIdentifier,
+  updateWeightRecommendation
 }) => {
   return (
     <div className="space-y-6">
@@ -16,38 +21,72 @@ const WeightsView = ({
         const dayExercises = weightData.filter(
           item => item.week === activeWeek && item.day === workout.day
         );
+        const workoutStatus = dayExercises[0]?.status || 'not_done';
+        const workoutId = getWorkoutIdentifier('weights', { week: activeWeek, day: workout.day, workoutName: workout.name });
+        const collapsed = isCollapsed(workoutId);
+        const shouldShowCollapsed = (workoutStatus === 'completed' || workoutStatus === 'skipped') && collapsed;
         
         return (
           <div key={dayIndex} className="bg-slate-800 rounded-lg shadow-xl overflow-hidden border border-slate-700">
             <div className="bg-slate-900 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-700">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg sm:text-xl font-semibold text-white">{workout.day} - {workout.name}</h3>
-                {(() => {
-                  const workoutStatus = dayExercises[0]?.status || 'not_done';
-                  return (
+                <div className="flex items-center gap-2">
+                  {(workoutStatus === 'completed' || workoutStatus === 'skipped') && (
                     <button
-                      onClick={() => updateWorkoutStatus('weights', { week: activeWeek, day: workout.day, workoutName: workout.name }, workoutStatus)}
-                      className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 ${
-                        workoutStatus === 'completed' 
-                          ? 'bg-green-600 text-white hover:bg-green-700' 
-                          : workoutStatus === 'skipped'
-                          ? 'bg-red-600 text-white hover:bg-red-700'
-                          : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
-                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCollapsed(workoutId);
+                      }}
+                      className="px-2 py-1.5 rounded-lg text-slate-300 hover:bg-slate-700 transition-all"
+                      title={collapsed ? 'Expand' : 'Collapse'}
                     >
-                      {workoutStatus === 'completed' ? (
-                        <> <Check size={16} /> <span className="hidden sm:inline">Completed</span> </>
-                      ) : workoutStatus === 'skipped' ? (
-                        <> <X size={16} /> <span className="hidden sm:inline">Skipped</span> </>
-                      ) : (
-                        <> ○ <span className="hidden sm:inline">Not Done</span> </>
-                      )}
+                      {collapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
                     </button>
-                  );
-                })()}
+                  )}
+                  <button
+                    onClick={() => updateWorkoutStatus('weights', { week: activeWeek, day: workout.day, workoutName: workout.name }, workoutStatus)}
+                    className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 ${
+                      workoutStatus === 'completed' 
+                        ? 'bg-green-600 text-white hover:bg-green-700' 
+                        : workoutStatus === 'skipped'
+                        ? 'bg-red-600 text-white hover:bg-red-700'
+                        : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+                    }`}
+                  >
+                    {workoutStatus === 'completed' ? (
+                      <> <Check size={16} /> <span className="hidden sm:inline">Completed</span> </>
+                    ) : workoutStatus === 'skipped' ? (
+                      <> <X size={16} /> <span className="hidden sm:inline">Skipped</span> </>
+                    ) : (
+                      <> ○ <span className="hidden sm:inline">Not Done</span> </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
-            <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
+              {shouldShowCollapsed ? (
+              <div className="p-4 bg-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      workoutStatus === 'completed' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+                    }`}>
+                      {workoutStatus === 'completed' ? 'Completed' : 'Skipped'}
+                    </span>
+                    <span className="text-sm text-slate-400">Click to expand and view details</span>
+                  </div>
+                  <button
+                    onClick={() => toggleCollapsed(workoutId)}
+                    className="px-3 py-1.5 rounded-lg text-slate-300 hover:bg-slate-700 transition-all flex items-center gap-1"
+                  >
+                    <span className="text-xs">Expand</span>
+                    <ChevronDown size={16} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
               {dayExercises.map((exercise, exerciseIndex) => {
                 const exerciseDataIndex = weightData.findIndex(
                   item => item.week === exercise.week && 
@@ -59,7 +98,15 @@ const WeightsView = ({
                   <div key={exerciseIndex} className="bg-slate-700 rounded-lg p-3 sm:p-4 border border-slate-600">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4">
                       <div className="flex-1">
-                        <h4 className="text-base sm:text-lg font-semibold text-white mb-1">{exercise.exercise}</h4>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="text-base sm:text-lg font-semibold text-white">{exercise.exercise}</h4>
+                          <WeightRecommendation
+                            recommendation={exercise.weightRecommendation || null}
+                            onChange={updateWeightRecommendation}
+                            exerciseIndex={exerciseIndex}
+                            exerciseDataIndex={exerciseDataIndex}
+                          />
+                        </div>
                         <p className="text-xs sm:text-sm text-slate-400">Rep Range: {exercise.repRange}</p>
                         {exercise.recommendedSets && (
                           <p className="text-xs text-slate-500 mt-1 italic">
@@ -88,18 +135,38 @@ const WeightsView = ({
                         <div className="block md:hidden space-y-3">
                           {exercise.sets.map((set, setIndex) => {
                             const lastWeekWeight = getLastWeekWeight(activeWeek, workout.day, exercise.exercise, set.set, weightData);
+                            // Get previous week's recommendation
+                            const lastWeekExercise = activeWeek > 1 ? weightData.find(
+                              item => item.week === activeWeek - 1 && 
+                                      item.day === workout.day && 
+                                      item.exercise === exercise.exercise
+                            ) : null;
+                            const lastWeekRecommendation = lastWeekExercise?.weightRecommendation || null;
                             
                             return (
                               <div key={setIndex} className="bg-slate-800 rounded-lg p-4 space-y-3 border border-slate-600">
                                 <div className="flex items-center justify-between">
                                   <span className="text-base font-semibold text-white">Set {set.set}</span>
                                   {lastWeekWeight !== '-' && (
-                                    <span className="text-sm text-blue-400 font-medium">Last: {lastWeekWeight} kg</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-sm text-blue-400 font-medium">Last: {lastWeekWeight} kg</span>
+                                      {lastWeekRecommendation === 'increase' && (
+                                        <ArrowUp size={14} className="text-green-400" title="Increase weight" />
+                                      )}
+                                      {lastWeekRecommendation === 'drop' && (
+                                        <ArrowDown size={14} className="text-red-400" title="Drop weight" />
+                                      )}
+                                      {lastWeekRecommendation === 'stay' && (
+                                        <Minus size={14} className="text-amber-400" title="Stay at same weight" />
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                   <div>
-                                    <label className="block text-xs text-slate-400 mb-1.5">Weight (kg)</label>
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      <label className="block text-xs text-slate-400">Weight (kg)</label>
+                                    </div>
                                     <input
                                       type="number"
                                       step="0.5"
@@ -164,22 +231,44 @@ const WeightsView = ({
                             <tbody className="divide-y divide-slate-600">
                               {exercise.sets.map((set, setIndex) => {
                                 const lastWeekWeight = getLastWeekWeight(activeWeek, workout.day, exercise.exercise, set.set, weightData);
+                                // Get previous week's recommendation
+                                const lastWeekExercise = activeWeek > 1 ? weightData.find(
+                                  item => item.week === activeWeek - 1 && 
+                                          item.day === workout.day && 
+                                          item.exercise === exercise.exercise
+                                ) : null;
+                                const lastWeekRecommendation = lastWeekExercise?.weightRecommendation || null;
                                 
                                 return (
                                   <tr key={setIndex} className="hover:bg-slate-600 transition-colors">
                                     <td className="px-4 py-3 text-sm text-white font-medium">{set.set}</td>
-                                    <td className="px-4 py-3 text-sm text-blue-400 font-medium">
-                                      {lastWeekWeight !== '-' ? `${lastWeekWeight} kg` : '-'}
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-sm text-blue-400 font-medium">
+                                          {lastWeekWeight !== '-' ? `${lastWeekWeight} kg` : '-'}
+                                        </span>
+                                        {lastWeekWeight !== '-' && lastWeekRecommendation === 'increase' && (
+                                          <ArrowUp size={14} className="text-green-400" title="Increase weight" />
+                                        )}
+                                        {lastWeekWeight !== '-' && lastWeekRecommendation === 'drop' && (
+                                          <ArrowDown size={14} className="text-red-400" title="Drop weight" />
+                                        )}
+                                        {lastWeekWeight !== '-' && lastWeekRecommendation === 'stay' && (
+                                          <Minus size={14} className="text-amber-400" title="Stay at same weight" />
+                                        )}
+                                      </div>
                                     </td>
                                     <td className="px-4 py-3">
-                                      <input
-                                        type="number"
-                                        step="0.5"
-                                        value={set.weight}
-                                        onChange={(e) => updateWeight(exerciseDataIndex, setIndex, 'weight', e.target.value)}
-                                        className="w-20 px-3 py-2 bg-slate-800 border border-slate-500 rounded text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                        placeholder="0"
-                                      />
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="number"
+                                          step="0.5"
+                                          value={set.weight}
+                                          onChange={(e) => updateWeight(exerciseDataIndex, setIndex, 'weight', e.target.value)}
+                                          className="w-20 px-3 py-2 bg-slate-800 border border-slate-500 rounded text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                          placeholder="0"
+                                        />
+                                      </div>
                                     </td>
                                     <td className="px-4 py-3">
                                       <input
@@ -222,7 +311,8 @@ const WeightsView = ({
                   </div>
                 );
               })}
-            </div>
+              </div>
+            )}
           </div>
         );
       })}

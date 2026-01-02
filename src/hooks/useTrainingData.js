@@ -8,6 +8,7 @@ import {
   getDefaultWeightDataLevel2
 } from '../data/defaultData';
 import { workoutDaysLevel1, workoutDaysLevel2 } from '../data/workoutPlans';
+import { calculatePaceMinPerKm, isDecimalFormat, mmssToDecimal } from '../utils/timeFormat';
 
 // Hook for running data
 export const useRunningData = (activeLevel) => {
@@ -18,7 +19,8 @@ export const useRunningData = (activeLevel) => {
         const parsed = JSON.parse(saved);
         // Ensure all entries have interval properties, and populate from defaults if missing
         if (Array.isArray(parsed)) {
-          return parsed.map(r => {
+          // Migration: Update old Level 1 schedule (Sunday/Tuesday/Thursday) to new schedule (Monday/Wednesday/Saturday)
+          const migrated = parsed.map(r => {
             const base = {
               ...r,
               intervalStructure: r.intervalStructure || '',
@@ -27,11 +29,27 @@ export const useRunningData = (activeLevel) => {
               status: r.status || 'not_done'
             };
             
+            // Migrate Level 1 old schedule to new schedule
+            if (activeLevel === 1) {
+              // Old: Sunday (Run 1) -> New: Monday (Run 1)
+              if (r.day === 'Sunday' && r.run === 1) {
+                base.day = 'Monday';
+              }
+              // Old: Tuesday (Run 2) -> New: Wednesday (Run 2)
+              else if (r.day === 'Tuesday' && r.run === 2) {
+                base.day = 'Wednesday';
+              }
+              // Old: Thursday (Run 3) -> New: Saturday (Run 3)
+              else if (r.day === 'Thursday' && r.run === 3) {
+                base.day = 'Saturday';
+              }
+            }
+            
             // If this is an interval run but missing structure, populate from defaults
             if (r.type === 'Interval' && (!r.intervalStructure || r.intervalStructure === '')) {
               if (activeLevel === 1) {
-                // Level 1: Week 6-8, Run 1 (Tuesday) - 5KM intervals
-                if (r.week >= 6 && (r.run === 1 || r.day === 'Tuesday')) {
+                // Level 1: Week 6-8, Run 2 (Wednesday) - 5KM intervals
+                if (r.week >= 6 && (r.run === 2 || r.day === 'Wednesday')) {
                   base.intervalStructure = '1KM Easy @ 60% HR → 500m Hard @ 85% HR → 1KM Easy @ 60% HR → 1KM Hard @ 85% HR → 1KM Easy @ 60% HR → 500m Hard @ 85% HR';
                   base.intervalRounds = 1;
                   base.restTime = 'Active recovery (easy pace segments @ 60% HR)';
@@ -46,8 +64,38 @@ export const useRunningData = (activeLevel) => {
               }
             }
             
+            // Migrate pace from km/h to min/km if needed
+            // Check if pace exists and is in km/h format (typically > 5, which would be unusual for min/km)
+            if (r.pace && r.pace !== '') {
+              const paceNum = parseFloat(r.pace);
+              // If pace > 10, it's likely km/h (running pace is typically 3-8 min/km)
+              // Convert km/h to min/km: min/km = 60 / km/h
+              if (!isNaN(paceNum) && paceNum > 10) {
+                const paceMinPerKm = 60 / paceNum;
+                base.pace = calculatePaceMinPerKm(paceMinPerKm, 1); // Calculate format for 1km
+              }
+            }
+            
             return base;
           });
+          
+          // Check if migration is needed (schedule or pace format)
+          const needsScheduleMigration = parsed.some(r => 
+            activeLevel === 1 && (r.day === 'Sunday' || r.day === 'Tuesday' || (r.day === 'Thursday' && r.run === 3))
+          );
+          const needsPaceMigration = parsed.some(r => {
+            if (r.pace && r.pace !== '') {
+              const paceNum = parseFloat(r.pace);
+              return !isNaN(paceNum) && paceNum > 10; // Likely km/h format
+            }
+            return false;
+          });
+          
+          if (needsScheduleMigration || needsPaceMigration) {
+            localStorage.setItem(`fitnessTracker_runningData_level${activeLevel}`, JSON.stringify(migrated));
+          }
+          
+          return migrated;
         }
         return activeLevel === 1 ? getDefaultRunningDataLevel1() : getDefaultRunningDataLevel2();
       }
@@ -63,14 +111,66 @@ export const useRunningData = (activeLevel) => {
       const saved = localStorage.getItem(`fitnessTracker_runningData_level${activeLevel}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        const normalized = Array.isArray(parsed) ? parsed.map(r => ({
-          ...r,
-          intervalStructure: r.intervalStructure || '',
-          intervalRounds: r.intervalRounds || 0,
-          restTime: r.restTime || '',
-          status: r.status || 'not_done'
-        })) : [];
-        setRunningData(normalized);
+        if (Array.isArray(parsed)) {
+          // Migration: Update old Level 1 schedule (Sunday/Tuesday/Thursday) to new schedule (Monday/Wednesday/Saturday)
+          const normalized = parsed.map(r => {
+            const base = {
+              ...r,
+              intervalStructure: r.intervalStructure || '',
+              intervalRounds: r.intervalRounds || 0,
+              restTime: r.restTime || '',
+              status: r.status || 'not_done'
+            };
+            
+            // Migrate Level 1 old schedule to new schedule
+            if (activeLevel === 1) {
+              // Old: Sunday (Run 1) -> New: Monday (Run 1)
+              if (r.day === 'Sunday' && r.run === 1) {
+                base.day = 'Monday';
+              }
+              // Old: Tuesday (Run 2) -> New: Wednesday (Run 2)
+              else if (r.day === 'Tuesday' && r.run === 2) {
+                base.day = 'Wednesday';
+              }
+              // Old: Thursday (Run 3) -> New: Saturday (Run 3)
+              else if (r.day === 'Thursday' && r.run === 3) {
+                base.day = 'Saturday';
+              }
+            }
+            
+            // Migrate pace from km/h to min/km if needed
+            if (r.pace && r.pace !== '') {
+              const paceNum = parseFloat(r.pace);
+              // If pace > 10, it's likely km/h (running pace is typically 3-8 min/km)
+              if (!isNaN(paceNum) && paceNum > 10) {
+                const paceMinPerKm = 60 / paceNum;
+                base.pace = calculatePaceMinPerKm(paceMinPerKm, 1);
+              }
+            }
+            
+            return base;
+          });
+          
+          // Check if migration is needed
+          const needsScheduleMigration = parsed.some(r => 
+            activeLevel === 1 && (r.day === 'Sunday' || r.day === 'Tuesday' || (r.day === 'Thursday' && r.run === 3))
+          );
+          const needsPaceMigration = parsed.some(r => {
+            if (r.pace && r.pace !== '') {
+              const paceNum = parseFloat(r.pace);
+              return !isNaN(paceNum) && paceNum > 10;
+            }
+            return false;
+          });
+          
+          if (needsScheduleMigration || needsPaceMigration) {
+            localStorage.setItem(`fitnessTracker_runningData_level${activeLevel}`, JSON.stringify(normalized));
+          }
+          
+          setRunningData(normalized);
+        } else {
+          setRunningData(activeLevel === 1 ? getDefaultRunningDataLevel1() : getDefaultRunningDataLevel2());
+        }
       } else {
         setRunningData(activeLevel === 1 ? getDefaultRunningDataLevel1() : getDefaultRunningDataLevel2());
       }
@@ -91,15 +191,26 @@ export const useRunningData = (activeLevel) => {
 
   const updateRunning = (index, field, value) => {
     const newData = [...runningData];
-    newData[index][field] = value;
+    
+    // Convert MM:SS to decimal if needed for storage
+    if (field === 'duration' && value && typeof value === 'string' && value.includes(':')) {
+      newData[index][field] = mmssToDecimal(value);
+    } else {
+      newData[index][field] = value;
+    }
     
     if (field === 'duration' || field === 'distance') {
-      const duration = field === 'duration' ? parseFloat(value) : parseFloat(newData[index].duration);
+      let duration = field === 'duration' 
+        ? (value && typeof value === 'string' && value.includes(':') ? mmssToDecimal(value) : parseFloat(value))
+        : parseFloat(newData[index].duration);
       const distance = field === 'distance' ? parseFloat(value) : parseFloat(newData[index].distance);
       
-      if (duration && distance) {
-        const pace = (distance / (duration / 60)).toFixed(2);
+      if (duration && distance && duration > 0 && distance > 0) {
+        // Calculate pace in min/km: duration (min) / distance (km)
+        const pace = calculatePaceMinPerKm(duration, distance);
         newData[index].pace = pace;
+      } else if (!duration || !distance) {
+        newData[index].pace = '';
       }
     }
     
@@ -135,10 +246,38 @@ export const useCyclingData = (activeLevel) => {
       const saved = localStorage.getItem(`fitnessTracker_cyclingData_level${activeLevel}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        const normalized = Array.isArray(parsed) ? parsed.map(c => ({
-          ...c,
-          status: c.status || 'not_done'
-        })) : [];
+        const normalized = Array.isArray(parsed) ? parsed.map(c => {
+          const base = {
+            ...c,
+            status: c.status || 'not_done'
+          };
+          
+          // Migrate pace from km/h to min/km if needed
+          if (c.pace && c.pace !== '') {
+            const paceNum = parseFloat(c.pace);
+            // If pace > 15, it's likely km/h (cycling pace is typically 2-6 min/km)
+            if (!isNaN(paceNum) && paceNum > 15) {
+              const paceMinPerKm = 60 / paceNum;
+              base.pace = calculatePaceMinPerKm(paceMinPerKm, 1);
+            }
+          }
+          
+          return base;
+        }) : [];
+        
+        // Check if pace migration is needed
+        const needsPaceMigration = parsed.some(c => {
+          if (c.pace && c.pace !== '') {
+            const paceNum = parseFloat(c.pace);
+            return !isNaN(paceNum) && paceNum > 15;
+          }
+          return false;
+        });
+        
+        if (needsPaceMigration) {
+          localStorage.setItem(`fitnessTracker_cyclingData_level${activeLevel}`, JSON.stringify(normalized));
+        }
+        
         setCyclingData(normalized);
       } else {
         setCyclingData(activeLevel === 1 ? getDefaultCyclingDataLevel1() : getDefaultCyclingDataLevel2());
@@ -160,15 +299,26 @@ export const useCyclingData = (activeLevel) => {
 
   const updateCycling = (index, field, value) => {
     const newData = [...cyclingData];
-    newData[index][field] = value;
+    
+    // Convert MM:SS to decimal if needed for storage
+    if (field === 'duration' && value && typeof value === 'string' && value.includes(':')) {
+      newData[index][field] = mmssToDecimal(value);
+    } else {
+      newData[index][field] = value;
+    }
     
     if (field === 'duration' || field === 'distance') {
-      const duration = field === 'duration' ? parseFloat(value) : parseFloat(newData[index].duration);
+      let duration = field === 'duration' 
+        ? (value && typeof value === 'string' && value.includes(':') ? mmssToDecimal(value) : parseFloat(value))
+        : parseFloat(newData[index].duration);
       const distance = field === 'distance' ? parseFloat(value) : parseFloat(newData[index].distance);
       
-      if (duration && distance) {
-        const pace = (distance / (duration / 60)).toFixed(2);
+      if (duration && distance && duration > 0 && distance > 0) {
+        // Calculate pace in min/km: duration (min) / distance (km)
+        const pace = calculatePaceMinPerKm(duration, distance);
         newData[index].pace = pace;
+      } else if (!duration || !distance) {
+        newData[index].pace = '';
       }
     }
     
@@ -187,10 +337,11 @@ export const useWeightData = (activeLevel) => {
       const saved = localStorage.getItem(`fitnessTracker_weightData_level${activeLevel}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Normalize existing data - add status if missing
+        // Normalize existing data - add status and weightRecommendation if missing
         const normalized = Array.isArray(parsed) ? parsed.map(w => ({
           ...w,
-          status: w.status || 'not_done'
+          status: w.status || 'not_done',
+          weightRecommendation: w.weightRecommendation !== undefined ? w.weightRecommendation : null
         })) : [];
         return normalized;
       }
@@ -208,7 +359,8 @@ export const useWeightData = (activeLevel) => {
         const parsed = JSON.parse(saved);
         const normalized = Array.isArray(parsed) ? parsed.map(w => ({
           ...w,
-          status: w.status || 'not_done'
+          status: w.status || 'not_done',
+          weightRecommendation: w.weightRecommendation !== undefined ? w.weightRecommendation : null
         })) : [];
         setWeightData(normalized);
       } else {
@@ -263,6 +415,14 @@ export const useWeightData = (activeLevel) => {
     setWeightData(newData);
   };
 
-  return { weightData, setWeightData, updateWeight, updateNumSets };
+  const updateWeightRecommendation = (exerciseIndex, recommendation) => {
+    const newData = [...weightData];
+    if (newData[exerciseIndex]) {
+      newData[exerciseIndex].weightRecommendation = recommendation;
+      setWeightData(newData);
+    }
+  };
+
+  return { weightData, setWeightData, updateWeight, updateNumSets, updateWeightRecommendation };
 };
 

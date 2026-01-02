@@ -1,36 +1,54 @@
 import React from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { decimalToMMSS } from '../utils/timeFormat';
 
-const CyclingView = ({ activeWeek, cyclingData, updateCycling, updateWorkoutStatus, activeLevel }) => {
+const CyclingView = ({ activeWeek, cyclingData, updateCycling, updateWorkoutStatus, activeLevel, isCollapsed, toggleCollapsed, getWorkoutIdentifier }) => {
   const weekData = cyclingData.filter(r => r.week === activeWeek);
   const cyclingDay = activeLevel === 1 ? 'Friday' : 'Thursday';
   const weekCycling = cyclingData.find(c => c.week === activeWeek);
   const currentStatus = weekCycling?.status || 'not_done';
   const isInterval = weekData.some(c => c.segment && c.segment.includes('Hard'));
+  const workoutId = getWorkoutIdentifier('cycling', { week: activeWeek, day: cyclingDay });
+  const collapsed = isCollapsed(workoutId);
+  const shouldShowCollapsed = (currentStatus === 'completed' || currentStatus === 'skipped') && collapsed;
 
   return (
     <div className="bg-slate-800 rounded-lg shadow-xl overflow-hidden border border-slate-700">
       <div className="bg-slate-900 px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-700">
         <div className="flex items-center justify-between">
           <h2 className="text-xl sm:text-2xl font-bold text-white">Cycling - Week {activeWeek}</h2>
-          <button
-            onClick={() => updateWorkoutStatus('cycling', { week: activeWeek, day: cyclingDay }, currentStatus)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${
-              currentStatus === 'completed' 
-                ? 'bg-green-600 text-white hover:bg-green-700' 
-                : currentStatus === 'skipped'
-                ? 'bg-red-600 text-white hover:bg-red-700'
-                : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
-            }`}
-          >
-            {currentStatus === 'completed' ? (
-              <> <Check size={18} /> Completed </>
-            ) : currentStatus === 'skipped' ? (
-              <> <X size={18} /> Skipped </>
-            ) : (
-              <> ○ Not Done </>
+          <div className="flex items-center gap-2">
+            {(currentStatus === 'completed' || currentStatus === 'skipped') && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleCollapsed(workoutId);
+                }}
+                className="px-2 py-1.5 rounded-lg text-slate-300 hover:bg-slate-700 transition-all"
+                title={collapsed ? 'Expand' : 'Collapse'}
+              >
+                {collapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+              </button>
             )}
-          </button>
+            <button
+              onClick={() => updateWorkoutStatus('cycling', { week: activeWeek, day: cyclingDay }, currentStatus)}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${
+                currentStatus === 'completed' 
+                  ? 'bg-green-600 text-white hover:bg-green-700' 
+                  : currentStatus === 'skipped'
+                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+              }`}
+            >
+              {currentStatus === 'completed' ? (
+                <> <Check size={18} /> Completed </>
+              ) : currentStatus === 'skipped' ? (
+                <> <X size={18} /> Skipped </>
+              ) : (
+                <> ○ Not Done </>
+              )}
+            </button>
+          </div>
         </div>
         {isInterval && (
           <div className="mt-3 bg-orange-900/30 border border-orange-700 rounded-lg p-3">
@@ -52,6 +70,28 @@ const CyclingView = ({ activeWeek, cyclingData, updateCycling, updateWorkoutStat
         )}
       </div>
       
+      {shouldShowCollapsed ? (
+        <div className="p-4 bg-slate-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                currentStatus === 'completed' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+              }`}>
+                {currentStatus === 'completed' ? 'Completed' : 'Skipped'}
+              </span>
+              <span className="text-sm text-slate-400">Click to expand and view details</span>
+            </div>
+            <button
+              onClick={() => toggleCollapsed(workoutId)}
+              className="px-3 py-1.5 rounded-lg text-slate-300 hover:bg-slate-700 transition-all flex items-center gap-1"
+            >
+              <span className="text-xs">Expand</span>
+              <ChevronDown size={16} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Mobile: Vertical card layout */}
       <div className="block md:hidden p-4 space-y-4">
         {weekData.map((row, index) => {
@@ -93,8 +133,8 @@ const CyclingView = ({ activeWeek, cyclingData, updateCycling, updateWorkoutStat
               
               {row.pace && (
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1.5">Pace (km/h)</label>
-                  <div className="text-base text-slate-300 font-medium">{row.pace} km/h</div>
+                  <label className="block text-xs text-slate-400 mb-1.5">Pace (min/km)</label>
+                  <div className="text-base text-slate-300 font-medium">{row.pace}/km</div>
                 </div>
               )}
               
@@ -127,7 +167,7 @@ const CyclingView = ({ activeWeek, cyclingData, updateCycling, updateWorkoutStat
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Segment</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Duration (min)</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Distance (km)</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Pace (km/h)</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">Pace (min/km)</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">RPE (1-5)</th>
             </tr>
           </thead>
@@ -164,7 +204,7 @@ const CyclingView = ({ activeWeek, cyclingData, updateCycling, updateWorkoutStat
                     />
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-300">
-                    {row.pace && `${row.pace} km/h`}
+                    {row.pace && `${row.pace}/km`}
                   </td>
                   <td className="px-4 py-3">
                     <select
@@ -186,6 +226,8 @@ const CyclingView = ({ activeWeek, cyclingData, updateCycling, updateWorkoutStat
           </tbody>
         </table>
       </div>
+        </>
+      )}
     </div>
   );
 };
